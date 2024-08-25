@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from .models import *
 from rest_framework.exceptions import ValidationError
-from .utility import send_email, check_email_or_phone
+from .utility import send_email, check_email_or_phone, check_user_type
+from django.contrib.auth.password_validation import validate_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -89,3 +91,121 @@ class SignUpSerializer(serializers.ModelSerializer):
         data.update(instance.token())
 
         return data
+
+
+class ChangeUserSerializer(serializers.Serializer):
+    first_name = serializers.CharField(write_only=True, required=True)
+    last_name = serializers.CharField(write_only=True, required=True)
+    username = serializers.CharField(write_only=True, required=True)
+    password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, data):
+        password = data.get('password', None)
+        confirm_password = data.get('confirm_password', None)
+
+        if password != confirm_password:
+            data = {
+                'message': 'Passwords do not match'
+            }
+            raise ValidationError(data)
+
+        if password:
+            validate_password(password)
+            validate_password(confirm_password)
+
+        return data
+
+    def validate_username(self, username):
+        if len(username) < 5 or len(username) > 20:
+            data = {
+                'message': 'Username must be between 5 and 20 characters'
+            }
+            raise ValidationError(data)
+
+        if username.isdigit():
+            data = {
+                'message': 'Username must be unique'
+            }
+            raise ValidationError(data)
+
+        if Users.objects.filter(username=username).exists():
+            data = {
+                'message': 'Username already taken'
+            }
+            raise ValidationError(data)
+
+        return username
+
+    def update(self, instance, validated_data):
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.username = validated_data.get('username', instance.username)
+        instance.password = validated_data.get('password',
+                                               instance.password)  # 1234dbda --> HS256 -->  ahvsdjav@asvajhvds$jsdvasdvf$jshdfjshf
+
+        if validated_data.get('password'):
+            instance.set_password(validated_data.get('password'))
+
+        if instance.auth_status in [CODE_VERIFIED, DONE, PHOTO_DONE]:
+            instance.auth_status = DONE
+
+        else:
+            data = {
+                'message': 'Auth status is invalid'
+            }
+            raise ValidationError(data)
+        instance.save()
+        return instance
+
+
+class ChangePhotoSerializer(serializers.Serializer):
+    photo = serializers.ImageField(validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])])
+
+    def update(self, instance, validated_data):
+        photo = validated_data.get('photo')
+
+        if photo and instance.auth_status in [DONE, PHOTO_DONE]:
+            instance.photo = photo
+            instance.auth_status = PHOTO_DONE
+            instance.save()
+
+        else:
+            data = {
+                'message': 'Auth status is invalid'
+            }
+            raise ValidationError(data)
+        return instance
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    def __init__(self, request=None, *args, **kwargs):
+        super(LoginSerializer, self).__init__(*args, **kwargs)
+        self.fields['userinput'] = serializers.CharField(required=True)
+        self.fields['username'] = serializers.CharField(required=False, read_only=True)
+
+    def auth_validate(self, data):
+        user_input = data.get('userinput')
+        if check_user_type(user_input) == 'username':
+            username = user_input
+
+        elif check_user_type(user_input) == 'email':
+            user = self.get_user(
+                email__iexact=user_input)
+            username = user.username
+
+        elif check_user_type(user_input) == 'phone':
+            user = self.get_user(phone_number=user_input)
+            username = user.username
+
+        else:
+            data = {
+                'success': False,
+                'message': "Siz email, username yoki telefon raqami jonatishingiz kerak"
+            }
+            raise ValidationError(data)
+
+        authentication_kwargs = {
+            self.username_field: username,
+            'password': data['password']
+        }

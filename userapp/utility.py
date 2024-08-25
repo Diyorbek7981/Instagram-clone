@@ -28,6 +28,26 @@ def check_email_or_phone(email_or_phone):  # +23465273452734
     return email_or_phone
 
 
+def check_user_type(user_input):
+    if re.fullmatch(username_regex, user_input):
+        user_input = 'username'
+
+    elif re.fullmatch(email_regex, user_input):
+        user_input = 'email'
+
+    elif re.fullmatch(phone_regex, user_input):
+        user_input = 'phone'
+
+    else:
+        data = {
+            'success': False,
+            'message': "User input is not valid"
+        }
+        raise ValidationError(data)
+
+    return user_input
+
+
 class EmailThread(threading.Thread):
 
     def __init__(self, email):
@@ -64,7 +84,6 @@ def send_email(email, code):
             "content_type": "html"
         }
     )
-
 
 # def send_phone_code(phone, code):
 #     account_sid = os.environ['TWILIO_ACCOUNT_SID']
