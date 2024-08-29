@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from .models import *
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from .utility import send_email, check_email_or_phone, check_user_type
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import authenticate
 
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -209,3 +210,41 @@ class LoginSerializer(TokenObtainPairSerializer):
             self.username_field: username,
             'password': data['password']
         }
+        curent_user = Users.objects.filter(username__iexact=username).first()
+
+        if curent_user is not None and curent_user.auth_status in [NEW, CODE_VERIFIED]:
+            raise ValidationError(
+                {
+                    'success': False,
+                    'message': 'Siz royhatdan otmagansiz'
+                }
+            )
+        user = authenticate(**authentication_kwargs)  # loginqiladi
+        if user is not None:
+            self.user = user
+        else:
+            raise ValidationError(
+                {
+                    'success': False,
+                    'message': 'Username yoki pasvord hato'
+                }
+            )
+
+    def validate(self, data):
+        self.auth_validate(data)
+        if self.user.auth_status not in [DONE, PHOTO_DONE]:
+            raise PermissionDenied("Siz login qilolmaysiz ruhsatingiz yoq")
+        data = self.user.token()
+        data['auth_status'] = self.user.auth_status
+        data['full_name'] = self.user.full_name
+        return data
+
+    def get_user(self, **kwargs):
+        users = Users.objects.filter(**kwargs)
+        if not users.exists():
+            raise ValidationError(
+                {
+                    'message': 'User not found'
+                }
+            )
+        return users.first()

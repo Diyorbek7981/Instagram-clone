@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from datetime import datetime
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 
 # Create your views here.
@@ -119,3 +120,7 @@ class ChangePhotoView(APIView):
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
