@@ -3,7 +3,10 @@ from .models import *
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from .utility import send_email, check_email_or_phone, check_user_type
 from django.contrib.auth.password_validation import validate_password
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import AccessToken
+from django.contrib.auth.models import update_last_login
+from rest_framework.generics import get_object_or_404
 from django.contrib.auth import authenticate
 
 
@@ -248,3 +251,17 @@ class LoginSerializer(TokenObtainPairSerializer):
                 }
             )
         return users.first()
+
+
+class LoginRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        access_token_instance = AccessToken(data['access'])
+        user_id = access_token_instance['user_id']
+        user = get_object_or_404(Users, pk=user_id)
+        update_last_login(None, user)
+        return data
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()

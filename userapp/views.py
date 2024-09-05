@@ -5,7 +5,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from datetime import datetime
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.exceptions import TokenError
 
 
 # Create your views here.
@@ -124,3 +125,30 @@ class ChangePhotoView(APIView):
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+
+
+class LoginRefreshView(TokenRefreshView):
+    serializer_class = LoginRefreshSerializer
+
+
+class LogoutView(APIView):
+    serializer_class = LogoutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            refresh_token = self.request.data['refresh']
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            data = {
+                'success': True,
+                'message': 'Logged out successfully'
+            }
+            return Response(data, status=status.HTTP_205_RESET_CONTENT)
+        except TokenError:
+            data = {
+                'message': 'Invalid refresh token'
+            }
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)

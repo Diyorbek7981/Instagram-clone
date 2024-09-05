@@ -8,4 +8,6 @@ urlpatterns = [
     path('registration/', ChangeUserView.as_view()),
     path('change_photo/', ChangePhotoView.as_view()),
     path('login/', LoginView.as_view()),
+    path('logout/', LogoutView.as_view()),
+    path('login_refresh/', LoginRefreshView.as_view()),
 ]
