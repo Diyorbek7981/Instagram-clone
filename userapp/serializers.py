@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import *
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from .utility import send_email, check_email_or_phone, check_user_type
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
@@ -8,6 +8,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from django.contrib.auth.models import update_last_login
 from rest_framework.generics import get_object_or_404
 from django.contrib.auth import authenticate
+from django.db.models import Q
 
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -265,3 +266,65 @@ class LoginRefreshSerializer(TokenRefreshSerializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email_or_phone = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        email_or_phone = attrs.get('email_or_phone', None)
+        if email_or_phone is None:
+            raise ValidationError(
+                {
+                    'success': False,
+                    'message': 'Email or phone is not valid'
+                }
+            )
+        user = Users.objects.filter(
+            Q(phone_number=email_or_phone) | Q(email=email_or_phone))
+
+        if not user.exists():
+            raise NotFound(detail='User not found')
+        attrs['user'] = user.first()  # ['diyorbek']= --> diyorbek
+        return attrs
+
+
+class ResetPasswordSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+    password = serializers.CharField(min_length=8, write_only=True, required=True)
+    confirm_password = serializers.CharField(min_length=8, write_only=True, required=True)
+
+    class Meta:
+        model = Users
+        fields = (
+            'id',
+            'password',
+            'confirm_password'
+        )
+
+    def validate(self, data):
+        password = data.get('password', None)
+        confirm_password = data.get('confirm_password', None)
+        if password != confirm_password:
+            raise ValidationError(
+                {
+                    'success': False,
+                    'message': 'Passwords do not match'
+                }
+            )
+        if password:
+            validate_password(password)
+        return data
+
+    def update(self, instance, validated_data):
+        if instance.auth_status not in [CODE_VERIFIED]:
+            raise ValidationError(
+                {
+                    'success': False,
+                    'message': 'Auth status is invalid'
+                }
+            )
+        password = validated_data.pop('password', None)
+        instance.auth_status = DONE
+        instance.set_password(password)
+        return super(ResetPasswordSerializer, self).update(instance, validated_data)

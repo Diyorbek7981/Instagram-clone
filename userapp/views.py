@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from datetime import datetime
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
+from django.core.exceptions import ObjectDoesNotExist
 
 
 # Create your views here.
@@ -45,7 +46,7 @@ class VerifyAPIView(APIView):
         else:
             verify.update(is_confirmed=True)
 
-        if user.auth_status in [NEW]:
+        if user.auth_status in [NEW, FORGET_PASS]:
             user.auth_status = CODE_VERIFIED
             user.save()
         return True
@@ -152,3 +153,65 @@ class LogoutView(APIView):
                 'message': 'Invalid refresh token'
             }
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = ForgotPasswordSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        email_or_phone = serializer.validated_data.get(
+            'email_or_phone')  # ['email_or_phone':'dbdbvdhbvdfhbv'] -- dbdbvdhbvdfhbv
+        user = serializer.validated_data.get('user')
+
+        if check_email_or_phone(email_or_phone) == 'phone':
+            code = user.create_verify_code(VIA_PHONE)
+            send_email(email_or_phone, code)
+            # send_phone_code(email_or_phone, code)
+
+        elif check_email_or_phone(email_or_phone) == 'email':
+            code = user.create_verify_code(VIA_EMAIL)
+            send_email(email_or_phone, code)
+
+        user.auth_status = FORGET_PASS
+        user.save()
+
+        return Response(
+            {
+                "success": True,
+                'message': "Tasdiqlash kodi muvaffaqiyatli yuborildi",
+                "access": user.token()['access'],
+                "refresh": user.token()['refresh_token'],
+                "user_status": user.auth_status,
+            }, status=status.HTTP_200_OK
+        )
+
+
+class ResetPasswordView(generics.UpdateAPIView):
+    serializer_class = ResetPasswordSerializer
+    permission_classes = [permissions.IsAuthenticated, ]
+    http_method_names = ['patch', 'put']
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        response = super(ResetPasswordView, self).update(request, *args, **kwargs)
+
+        try:
+            user = Users.objects.get(id=response.data.get('id'))
+
+        except ObjectDoesNotExist as e:
+            raise NotFound(detail='User topilmadi')
+
+        return Response(
+            {
+                'success': True,
+                'message': "Parolingiz muvaffaqiyatli o'zgartirildi",
+                'access': user.token()['access'],
+                'refresh': user.token()['refresh_token'],
+                'auth_status': user.auth_status
+            }
+        )
