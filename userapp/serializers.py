@@ -328,3 +328,16 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
         instance.auth_status = DONE
         instance.set_password(password)
         return super(ResetPasswordSerializer, self).update(instance, validated_data)
+
+
+class UpdatePhoneNumberSerializer(serializers.Serializer):
+    new_phone_number = serializers.CharField(write_only=True, required=True)
+
+    def validate_new_phone_number(self, value):
+        if value and Users.objects.filter(phone_number=value).exists():
+            deta = {
+                'success': False,
+                'message': 'Phone number already exists'
+            }
+            raise ValidationError(deta)
+        return value

@@ -215,3 +215,67 @@ class ResetPasswordView(generics.UpdateAPIView):
                 'auth_status': user.auth_status
             }
         )
+
+
+class NewPhoneNumberView(APIView):
+    serializer_class = UpdatePhoneNumberSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        user = self.request.user
+        serializer.is_valid(raise_exception=True)
+        new_phone_number = serializer.validated_data.get('new_phone_number')
+
+        if check_email_or_phone(new_phone_number) == 'phone':
+            code = user.create_verify_code(VIA_PHONE)
+            send_email(new_phone_number, code)
+
+        user.new_phone = new_phone_number
+        user.save()
+
+        return Response(
+            {
+                'success': True,
+                'message': "Cod muvaffaqiyatli yuborildi",
+                'access': user.token()['access'],
+                'refresh': user.token()['refresh_token'],
+                'auth_status': user.auth_status
+            }
+        )
+
+
+class VerifyAndUpdatePhoneNumberView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = self.request.user
+        code = self.request.data.get('code')
+
+        self.check_verify(user, code)
+        return Response(
+            data={
+                'success': True,
+                'auth_status': user.auth_status,
+                'access': user.token()['access'],
+                'refresh': user.token()['refresh_token'],
+            }
+        )
+
+    @staticmethod
+    def check_verify(user, code):
+        verify = user.verify_codes.filter(expiration_time__gte=datetime.now(), code=code, is_confirmed=False)
+        if not verify.exists():
+            data = {
+                'message': 'Verification code is invalid',
+            }
+            raise ValidationError(data)
+        else:
+            verify.update(is_confirmed=True)
+
+        if user.auth_status not in [NEW, FORGET_PASS, CODE_VERIFIED]:
+            user.auth_status = DONE
+            user.phone_number = user.new_phone
+            user.new_phone = None
+            user.save()
+        return True
