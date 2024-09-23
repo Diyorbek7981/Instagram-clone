@@ -19,6 +19,8 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
+    # owner = serializers.ReadOnlyField(
+    #     source='author.username')
     category = CategorySerializer(read_only=True)
     post_likes_count = serializers.SerializerMethodField('get_post_likes_count')
     post_comments_count = serializers.SerializerMethodField('get_post_comments_count')
