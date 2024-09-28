@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .models import *
 from .serializers import *
 from .paginations import CustomPageNumberPagination
@@ -48,4 +50,49 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             }
         )
 
-# create
+
+class PostCommentCreateAPIView(generics.CreateAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        post_id = self.kwargs['pk']
+        serializer.save(author=self.request.user, post_id=post_id)
+
+
+class PostCommentListAPIView(generics.ListAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        post_id = self.kwargs['pk']
+        queryset = Comments.objects.filter(parent=None, post_id=post_id)
+        return queryset
+
+
+class PostLikeAPIView(APIView):
+
+    def post(self, request, pk):
+        try:
+            post_like = PostLike.objects.get(
+                author=self.request.user,
+                post_id=pk
+            )
+            post_like.delete()
+            data = {
+                "success": True,
+                "message": "Post liked deleted successfully",
+            }
+            return Response(data, status=status.HTTP_200_OK)
+        except PostLike.DoesNotExist:
+            post_like = PostLike.objects.create(
+                author=self.request.user,
+                post_id=pk
+            )
+            serializers = PostLikeSerializer(post_like)
+            data = {
+                "success": True,
+                "message": "Post liked created successfully",
+                "data": serializers.data
+            }
+            return Response(data, status=status.HTTP_201_CREATED)

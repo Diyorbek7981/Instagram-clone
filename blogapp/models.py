@@ -35,17 +35,20 @@ class Posts(BaseModel):
         verbose_name_plural = 'Posts'
 
     def __str__(self):
-        return self.author.username
+        return self.category.name
 
 
 class Comments(BaseModel):
-    author = models.ForeignKey(Users, on_delete=models.CASCADE)
+    author = models.ForeignKey(Users, on_delete=models.CASCADE, related_name='author')
     post = models.ForeignKey(Posts, on_delete=models.CASCADE, related_name='comments')
-    comment = models.TextField(validators=[MaxLengthValidator(1000)])
-    parent = models.ForeignKey('self',
-                               null=True,
-                               blank=True,
-                               on_delete=models.CASCADE)
+    comment = models.TextField()
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        related_name='child',
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.author} commented on {self.post}"
