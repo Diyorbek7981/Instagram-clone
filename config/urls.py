@@ -6,6 +6,10 @@ from django.conf.urls.static import static
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
+# translate u-n
+from django.conf.urls.i18n import i18n_patterns
+# debug
+from django.views.static import serve
 
 # swagger u-n
 schema_view = get_schema_view(
@@ -29,6 +33,14 @@ urlpatterns = [
     re_path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     re_path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     re_path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    # debug
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT}),
+]
+
+# translate u-n
+urlpatterns = [
+    *i18n_patterns(*urlpatterns, prefix_default_language=False),
 ]
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
